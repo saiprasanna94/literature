@@ -1,0 +1,12 @@
+{
+  "name": "literature",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.11.1",
+  "scripts": {
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "dev:server": "pnpm --filter @literature/server dev",
+    "dev:client": "pnpm --filter @literature/client dev"
+  }
+}

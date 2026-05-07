@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Felt table background — radial green with subtle texture */
+.felt-bg {
+  background:
+    radial-gradient(ellipse at top, #1a6b46 0%, #0f5132 45%, #0a3a25 100%);
+  position: relative;
+}
+.felt-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.012) 0,
+      rgba(255, 255, 255, 0.012) 2px,
+      transparent 2px,
+      transparent 8px
+    );
+  pointer-events: none;
+}
+
+/* Card faces */
+.card-face {
+  background: linear-gradient(180deg, #ffffff 0%, #f7f7f7 100%);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.12);
+}
+.card-face-back {
+  background:
+    linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+  background-size: 200% 200%;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0 6px, transparent 6px 12px),
+    linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+}
+
+/* Gold shimmer for victory banner */
+.text-gold-shimmer {
+  background: linear-gradient(90deg, #d4af37 0%, #f1d77a 25%, #ffffff 50%, #f1d77a 75%, #d4af37 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3s linear infinite;
+}
