@@ -6,11 +6,11 @@ import { blankGame, handIds, setHand, setTurn } from './test-utils.js';
 const LOW_HEARTS = ['H-2', 'H-3', 'H-4', 'H-5', 'H-6', 'H-7'];
 
 describe('applyClaim: success', () => {
-  it('removes the set cards, awards the set to claimer team, opens pending turn for that team', () => {
+  it('removes the set cards, awards the set to claimer team, auto-resumes turn when only one teammate has cards', () => {
     let g = blankGame();
     g = setHand(g, 'p0', ['H-2', 'H-3', 'D-K']); // claimer (team A)
-    g = setHand(g, 'p2', ['H-4', 'H-5']); // team A teammate
-    g = setHand(g, 'p4', ['H-6', 'H-7']); // team A teammate
+    g = setHand(g, 'p2', ['H-4', 'H-5']); // team A teammate, will go empty
+    g = setHand(g, 'p4', ['H-6', 'H-7']); // team A teammate, will go empty
     g = setHand(g, 'p1', ['C-2']); // opponent has unrelated card
     g = setTurn(g, 'p0');
 
@@ -31,21 +31,19 @@ describe('applyClaim: success', () => {
     expect(handIds(state, 'p0')).toEqual(['D-K']);
     expect(handIds(state, 'p2')).toEqual([]);
     expect(handIds(state, 'p4')).toEqual([]);
-    expect(state.currentTurnPlayerId).toBeNull();
-    expect(state.pendingTurnSelection).toEqual({
-      eligibleTeam: 'A',
-      reason: 'claim_resolved',
-    });
+    // Only p0 still has cards on team A → no need to prompt; auto-resume to p0.
+    expect(state.currentTurnPlayerId).toBe('p0');
+    expect(state.pendingTurnSelection).toBeNull();
   });
 
-  it('after success, take_turn from the claimer (still has cards) restores the turn', () => {
+  it('opens pending turn selection when multiple teammates remain eligible', () => {
     let g = blankGame();
-    g = setHand(g, 'p0', ['H-2', 'H-3', 'D-K']);
-    g = setHand(g, 'p2', ['H-4', 'H-5']);
-    g = setHand(g, 'p4', ['H-6', 'H-7']);
+    g = setHand(g, 'p0', ['H-2', 'H-3', 'D-K']); // claimer keeps D-K
+    g = setHand(g, 'p2', ['H-4', 'H-5', 'D-J']); // teammate keeps D-J
+    g = setHand(g, 'p4', ['H-6', 'H-7']); // teammate goes empty
     g = setTurn(g, 'p0');
 
-    const after = applyClaim(g, {
+    const { state } = applyClaim(g, {
       type: 'claim',
       claimerId: 'p0',
       setId: 'low_H',
@@ -54,11 +52,14 @@ describe('applyClaim: success', () => {
         p2: ['H-4', 'H-5'],
         p4: ['H-6', 'H-7'],
       },
-    }).state;
+    });
 
-    const resumed = applyTakeTurn(after, { type: 'take_turn', playerId: 'p0' });
-    expect(resumed.currentTurnPlayerId).toBe('p0');
-    expect(resumed.pendingTurnSelection).toBeNull();
+    // p0 and p2 both have cards; either may pick up.
+    expect(state.currentTurnPlayerId).toBeNull();
+    expect(state.pendingTurnSelection).toEqual({
+      eligibleTeam: 'A',
+      reason: 'claim_resolved',
+    });
   });
 
   it('after a successful claim that empties the claimer, a teammate may take the turn', () => {
@@ -98,7 +99,7 @@ describe('applyClaim: success', () => {
 });
 
 describe('applyClaim: failure', () => {
-  it('awards the set to the opposing team and opens pending turn for them', () => {
+  it('awards the set to the opposing team; auto-resumes when only one opponent has cards', () => {
     let g = blankGame();
     // p0 incorrectly thinks p2 holds H-7 (actually opponent p1 holds it).
     g = setHand(g, 'p0', ['H-2', 'H-3', 'D-K']);
@@ -123,6 +124,31 @@ describe('applyClaim: failure', () => {
     expect(state.claimedSets).toEqual([{ setId: 'low_H', team: 'B' }]);
     // All Low-Hearts cards leave hands regardless of where they were.
     expect(handIds(state, 'p1').sort()).toEqual(['C-2']);
+    // Only p1 has cards on team B (p3, p5 are empty) → auto-resume to p1.
+    expect(state.currentTurnPlayerId).toBe('p1');
+    expect(state.pendingTurnSelection).toBeNull();
+  });
+
+  it('opens pending turn for opposing team when multiple opponents have cards', () => {
+    let g = blankGame();
+    g = setHand(g, 'p0', ['H-2', 'H-3', 'D-K']);
+    g = setHand(g, 'p2', ['H-4', 'H-5']);
+    g = setHand(g, 'p4', ['H-6']);
+    g = setHand(g, 'p1', ['H-7', 'C-2']);
+    g = setHand(g, 'p3', ['C-K']); // second opposing player with cards
+    g = setTurn(g, 'p0');
+
+    const { state } = applyClaim(g, {
+      type: 'claim',
+      claimerId: 'p0',
+      setId: 'low_H',
+      assignments: {
+        p0: ['H-2', 'H-3'],
+        p2: ['H-4', 'H-5'],
+        p4: ['H-6', 'H-7'],
+      },
+    });
+
     expect(state.pendingTurnSelection).toEqual({
       eligibleTeam: 'B',
       reason: 'claim_resolved',

@@ -10,6 +10,7 @@ import {
   setOfCard,
 } from '@literature/shared';
 import { useEffect, useMemo, useState } from 'react';
+import { friendlyError } from '../lib/errors.js';
 import { CardView } from './Card.js';
 
 export function AskDialog({
@@ -19,7 +20,10 @@ export function AskDialog({
 }: {
   game: PublicGameState;
   onClose: () => void;
-  onSubmit: (payload: { targetId: string; cardId: string }) => Promise<void>;
+  onSubmit: (payload: {
+    targetId: string;
+    cardId: string;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   const me = game.players.find((p) => p.id === game.yourPlayerId);
   if (!me || !game.yourHand) return null;
@@ -53,13 +57,10 @@ export function AskDialog({
     if (!targetId || !cardIdSel) return;
     setBusy(true);
     setError(null);
-    try {
-      await onSubmit({ targetId, cardId: cardIdSel });
-    } catch (e: any) {
-      setError(e?.message ?? 'failed');
-    } finally {
-      setBusy(false);
-    }
+    const res = await onSubmit({ targetId, cardId: cardIdSel });
+    setBusy(false);
+    if (res.ok) onClose();
+    else setError(friendlyError(res.error));
   };
 
   return (

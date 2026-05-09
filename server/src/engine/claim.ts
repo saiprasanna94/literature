@@ -130,20 +130,31 @@ export function applyClaim(state: GameState, action: ClaimAction, now: number = 
   let pendingTurnSelection: PendingTurnSelection | null = state.pendingTurnSelection;
   let nextCurrentTurn: string | null = state.currentTurnPlayerId;
 
+  // If only one player on the eligible team has cards, skip the "anyone takes
+  // the turn" prompt — there's no one else who could pick anyway.
+  const eligibleOnTeam = (team: TeamId) =>
+    nextPlayers.filter((p) => p.team === team && p.hand.length > 0);
+
   if (status === 'finished') {
     pendingTurnSelection = null;
     nextCurrentTurn = null;
-  } else if (teamWithCards(awardedTeam)) {
-    pendingTurnSelection = { eligibleTeam: awardedTeam, reason: 'claim_resolved' };
-    nextCurrentTurn = null;
   } else {
     const otherTeam: TeamId = awardedTeam === 'A' ? 'B' : 'A';
-    if (teamWithCards(otherTeam)) {
-      pendingTurnSelection = { eligibleTeam: otherTeam, reason: 'claim_resolved' };
-      nextCurrentTurn = null;
-    } else {
-      // No cards left anywhere; can't continue — leave for caller to resolve.
+    const eligibleTeam: TeamId = teamWithCards(awardedTeam)
+      ? awardedTeam
+      : teamWithCards(otherTeam)
+        ? otherTeam
+        : awardedTeam; // no one has cards anywhere; pick a team for shape (won't be used)
+
+    const eligible = eligibleOnTeam(eligibleTeam);
+    if (eligible.length === 0) {
       pendingTurnSelection = null;
+      nextCurrentTurn = null;
+    } else if (eligible.length === 1) {
+      pendingTurnSelection = null;
+      nextCurrentTurn = eligible[0]!.id;
+    } else {
+      pendingTurnSelection = { eligibleTeam, reason: 'claim_resolved' };
       nextCurrentTurn = null;
     }
   }

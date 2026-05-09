@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { friendlyError } from '../lib/errors.js';
 import { useGameStore } from '../store.js';
 
 export function HomePage() {
@@ -17,7 +18,7 @@ export function HomePage() {
     setBusy(true);
     const res = await createRoom(name.trim(), size);
     setBusy(false);
-    if (!res.ok) setError(res.error);
+    if (!res.ok) setError(friendlyError(res.error));
   };
 
   const onJoin = async () => {
@@ -27,7 +28,7 @@ export function HomePage() {
     setBusy(true);
     const res = await joinRoom(roomCode.trim().toUpperCase(), name.trim());
     setBusy(false);
-    if (!res.ok) setError(res.error);
+    if (!res.ok) setError(friendlyError(res.error));
   };
 
   return (

@@ -8,6 +8,7 @@ import {
   SetId,
 } from '@literature/shared';
 import { useEffect, useMemo, useState } from 'react';
+import { friendlyError } from '../lib/errors.js';
 import { CardView } from './Card.js';
 
 export function ClaimDialog({
@@ -17,7 +18,10 @@ export function ClaimDialog({
 }: {
   game: PublicGameState;
   onClose: () => void;
-  onSubmit: (payload: { setId: SetId; assignments: Record<string, string[]> }) => Promise<void>;
+  onSubmit: (payload: {
+    setId: SetId;
+    assignments: Record<string, string[]>;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   const me = game.players.find((p) => p.id === game.yourPlayerId);
   if (!me) return null;
@@ -73,13 +77,10 @@ export function ClaimDialog({
       grouped[owner].push(cardIdStr);
     }
 
-    try {
-      await onSubmit({ setId, assignments: grouped });
-    } catch (e: any) {
-      setError(e?.message ?? 'failed');
-    } finally {
-      setBusy(false);
-    }
+    const res = await onSubmit({ setId, assignments: grouped });
+    setBusy(false);
+    if (res.ok) onClose();
+    else setError(friendlyError(res.error));
   };
 
   return (

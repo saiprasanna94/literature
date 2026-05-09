@@ -1,10 +1,12 @@
-import { ALL_SETS, cardId, PublicGameState, PublicPlayer, SET_LABELS, TeamId } from '@literature/shared';
+import { cardId, PublicGameState, PublicPlayer, TeamId } from '@literature/shared';
 import { useState } from 'react';
 import { AskDialog } from '../components/AskDialog.js';
 import { CardView } from '../components/Card.js';
 import { ClaimDialog } from '../components/ClaimDialog.js';
+import { DeductionPanel } from '../components/DeductionPanel.js';
 import { EventLog } from '../components/EventLog.js';
 import { VictoryOverlay } from '../components/VictoryOverlay.js';
+import { friendlyError } from '../lib/errors.js';
 import { useGameStore } from '../store.js';
 
 export function GamePage() {
@@ -106,11 +108,11 @@ export function GamePage() {
           </div>
 
           <aside className="space-y-4">
-            <ClaimedSetsPanel game={game} />
+            <DeductionPanel game={game} />
             <EventLog game={game} />
             {lastError && (
               <div className="rounded-lg border border-red-400/40 bg-red-900/40 p-2 text-xs text-red-100">
-                {lastError}
+                {friendlyError(lastError)}
               </div>
             )}
           </aside>
@@ -120,20 +122,14 @@ export function GamePage() {
           <AskDialog
             game={game}
             onClose={() => setShowAsk(false)}
-            onSubmit={async (payload) => {
-              const res = await ask(payload);
-              if (res.ok) setShowAsk(false);
-            }}
+            onSubmit={ask}
           />
         )}
         {showClaim && (
           <ClaimDialog
             game={game}
             onClose={() => setShowClaim(false)}
-            onSubmit={async (payload) => {
-              const res = await claim(payload);
-              if (res.ok) setShowClaim(false);
-            }}
+            onSubmit={claim}
           />
         )}
 
@@ -350,33 +346,3 @@ function ScoreBadge({ team, score, active }: { team: TeamId; score: number; acti
   );
 }
 
-function ClaimedSetsPanel({ game }: { game: PublicGameState }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/95 text-slate-900 shadow-sm overflow-hidden">
-      <div className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-        Claimed sets
-      </div>
-      <ul className="divide-y text-sm">
-        {ALL_SETS.map((s) => {
-          const claim = game.claimedSets.find((cs) => cs.setId === s);
-          return (
-            <li key={s} className="flex items-center justify-between px-3 py-1.5">
-              <span className={claim ? 'font-medium' : 'text-slate-400'}>{SET_LABELS[s]}</span>
-              {claim ? (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    claim.team === 'A' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  Team {claim.team}
-                </span>
-              ) : (
-                <span className="text-xs text-slate-400">—</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
