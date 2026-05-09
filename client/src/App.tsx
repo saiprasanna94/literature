@@ -17,8 +17,11 @@ export function App() {
   }, [connect, tryRejoin]);
 
   useEffect(() => {
-    // Drive routing from authoritative server state.
+    // Drive routing from authoritative server state. The /history* pages
+    // are static routes that should NOT trigger an automatic redirect even
+    // if there's an active session in the background.
     if (!room) return;
+    if (location.pathname.startsWith('/history')) return;
     const target =
       room.status === 'in_progress' || room.status === 'finished'
         ? `/room/${room.roomId}/game`

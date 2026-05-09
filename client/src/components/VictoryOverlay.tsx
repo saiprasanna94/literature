@@ -1,5 +1,6 @@
 import { ALL_SETS, PublicGameState, SET_LABELS, TeamId } from '@literature/shared';
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 
 const CONFETTI_COLORS = ['#d4af37', '#f1d77a', '#2563eb', '#dc2626', '#ffffff', '#10b981'];
 const CONFETTI_COUNT = 60;
@@ -118,12 +119,20 @@ export function VictoryOverlay({
           )}
         </div>
 
-        <button
-          onClick={onLeave}
-          className="rounded-lg bg-gold px-6 py-3 font-semibold text-slate-900 shadow-lg hover:bg-gold-light transition-colors"
-        >
-          Back to home
-        </button>
+        <div className="flex justify-center gap-3">
+          <button
+            onClick={onLeave}
+            className="rounded-lg bg-gold px-6 py-3 font-semibold text-slate-900 shadow-lg hover:bg-gold-light transition-colors"
+          >
+            Back to home
+          </button>
+          <Link
+            to="/history"
+            className="rounded-lg border border-white/30 px-6 py-3 font-semibold text-white hover:bg-white/10 transition-colors"
+          >
+            Review this game
+          </Link>
+        </div>
       </div>
     </div>
   );

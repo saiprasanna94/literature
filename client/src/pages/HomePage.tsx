@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { friendlyError } from '../lib/errors.js';
 import { useGameStore } from '../store.js';
 
@@ -145,6 +146,12 @@ export function HomePage() {
             </p>
           )}
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        </div>
+
+        <div className="mt-4 text-center">
+          <Link to="/history" className="text-sm text-white/70 hover:text-white underline-offset-2 hover:underline">
+            Browse past games →
+          </Link>
         </div>
       </div>
     </div>

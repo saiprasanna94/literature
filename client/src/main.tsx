@@ -2,7 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { App } from './App.js';
+import { GameDetailPage } from './pages/GameDetailPage.js';
 import { GamePage } from './pages/GamePage.js';
+import { HistoryPage } from './pages/HistoryPage.js';
 import { HomePage } from './pages/HomePage.js';
 import { LobbyPage } from './pages/LobbyPage.js';
 import './index.css';
@@ -15,6 +17,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route index element={<HomePage />} />
           <Route path="/room/:roomId/lobby" element={<LobbyPage />} />
           <Route path="/room/:roomId/game" element={<GamePage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/history/:id" element={<GameDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

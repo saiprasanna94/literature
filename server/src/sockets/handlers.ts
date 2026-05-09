@@ -7,6 +7,7 @@ import {
   toPublicState,
 } from '@literature/shared';
 import { Server, Socket } from 'socket.io';
+import { saveFinishedGame } from '../db/persistence.js';
 import { applyAsk } from '../engine/ask.js';
 import { applyClaim } from '../engine/claim.js';
 import { applyTakeTurn } from '../engine/turn.js';
@@ -210,7 +211,15 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
         });
         rooms.setGame(room.roomId, next.state);
         broadcastGame(room);
-        if (next.state.status === 'finished') broadcastRoom(room);
+        if (next.state.status === 'finished') {
+          broadcastRoom(room);
+          try {
+            const id = saveFinishedGame(room);
+            if (id) console.log(`[history] saved game ${id} from room ${room.roomId}`);
+          } catch (e) {
+            console.error('[history] save failed:', e);
+          }
+        }
       });
       cb(result);
     });

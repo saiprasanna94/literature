@@ -8,5 +8,11 @@
     "build": "pnpm -r build",
     "dev:server": "pnpm --filter @literature/server dev",
     "dev:client": "pnpm --filter @literature/client dev"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }
