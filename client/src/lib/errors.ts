@@ -30,8 +30,12 @@ const FRIENDLY: Record<string, string> = {
   NOT_IN_ROOM: "You're not in a room.",
   INVALID_NAME: 'Enter a valid name (1–24 characters).',
 
-  // Connectivity
+  // Connectivity / reclaim
   NO_SOCKET: 'Not connected to the server.',
+  SEAT_NOT_FOUND: 'No seat with that name in this room.',
+  SEAT_OCCUPIED: 'That seat is currently active — only its owner can rejoin it now.',
+  RECLAIM_GRACE_NOT_ELAPSED:
+    'That player only just disconnected — wait ~30 seconds before reclaiming.',
 };
 
 /** Map a server error code to a human message. Falls back to the raw code. */
