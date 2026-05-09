@@ -1,15 +1,25 @@
-import { GameState, RoomSummary, TeamId } from '@literature/shared';
+import { GameState, RoomSummary, SeatSummary, TeamId } from '@literature/shared';
 import { customAlphabet, nanoid } from 'nanoid';
 import { createGame } from '../engine/state.js';
 
 const codeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const newRoomCode = customAlphabet(codeAlphabet, 5);
 
+/**
+ * Once a player's last socket has been gone for this long, anyone with that
+ * player's name + the room code can reclaim the seat from a different device.
+ * Below this threshold, only a session holding the original playerId can
+ * rejoin (i.e. the same person reconnecting from a saved tab session).
+ */
+export const RECLAIM_GRACE_MS = 30_000;
+
 export type Seat = {
   seat: number;
   team: TeamId;
   playerId: string | null;
   name: string | null;
+  connected: boolean;
+  disconnectedAt?: number;
 };
 
 export type Room = {
@@ -27,6 +37,7 @@ const seatsForSize = (size: 6 | 8): Seat[] =>
     team: (i % 2 === 0 ? 'A' : 'B') as TeamId,
     playerId: null,
     name: null,
+    connected: false,
   }));
 
 export class RoomManager {
@@ -42,6 +53,7 @@ export class RoomManager {
     const seats = seatsForSize(size);
     seats[0]!.playerId = playerId;
     seats[0]!.name = hostName;
+    seats[0]!.connected = true;
 
     this.rooms.set(roomId, {
       roomId,
@@ -74,6 +86,7 @@ export class RoomManager {
     const playerId = nanoid(12);
     openSeat.playerId = playerId;
     openSeat.name = name;
+    openSeat.connected = true;
     this.playerRooms.set(playerId, room.roomId);
     return { playerId };
   }
@@ -85,6 +98,47 @@ export class RoomManager {
     if (!room.seats.some((s) => s.playerId === playerId)) {
       throw new Error('PLAYER_NOT_IN_ROOM');
     }
+    return room;
+  }
+
+  /**
+   * Reclaim a seat by name (case-insensitive) — used when the original
+   * playerId is lost (different device, cleared storage, etc.). Only allowed
+   * when the seat has been disconnected past the grace window.
+   *
+   * Returns the playerId that the caller should now treat as their own.
+   */
+  reclaimSeat(roomId: string, name: string): { room: Room; playerId: string } {
+    const room = this.getRoom(roomId);
+    if (!room) throw new Error('ROOM_NOT_FOUND');
+    const seat = room.seats.find(
+      (s) => s.name && s.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (!seat || !seat.playerId) throw new Error('SEAT_NOT_FOUND');
+    if (seat.connected) throw new Error('SEAT_OCCUPIED');
+    if (!seat.disconnectedAt || Date.now() - seat.disconnectedAt < RECLAIM_GRACE_MS) {
+      throw new Error('RECLAIM_GRACE_NOT_ELAPSED');
+    }
+    return { room, playerId: seat.playerId };
+  }
+
+  markConnected(playerId: string): Room | undefined {
+    const room = this.roomOf(playerId);
+    if (!room) return;
+    const seat = room.seats.find((s) => s.playerId === playerId);
+    if (!seat) return;
+    seat.connected = true;
+    seat.disconnectedAt = undefined;
+    return room;
+  }
+
+  markDisconnected(playerId: string): Room | undefined {
+    const room = this.roomOf(playerId);
+    if (!room) return;
+    const seat = room.seats.find((s) => s.playerId === playerId);
+    if (!seat) return;
+    seat.connected = false;
+    seat.disconnectedAt = Date.now();
     return room;
   }
 
@@ -102,6 +156,8 @@ export class RoomManager {
       if (seat) {
         seat.playerId = null;
         seat.name = null;
+        seat.connected = false;
+        seat.disconnectedAt = undefined;
       }
       // If host left, transfer to first remaining player; else close room.
       if (room.hostPlayerId === playerId) {
@@ -112,6 +168,14 @@ export class RoomManager {
           this.rooms.delete(room.roomId);
           return { room: null, closed: true };
         }
+      }
+    } else {
+      // In-game: treat like a disconnect so the seat becomes reclaimable
+      // after the grace period.
+      const seat = room.seats.find((s) => s.playerId === playerId);
+      if (seat) {
+        seat.connected = false;
+        seat.disconnectedAt = Date.now();
       }
     }
     return { room, closed: false };
@@ -148,11 +212,14 @@ export class RoomManager {
       size: room.size,
       hostPlayerId: room.hostPlayerId,
       status: room.status,
-      seats: room.seats.map((s) => ({
+      reclaimGraceMs: RECLAIM_GRACE_MS,
+      seats: room.seats.map<SeatSummary>((s) => ({
         seat: s.seat,
         team: s.team,
         playerId: s.playerId,
         name: s.name,
+        connected: s.connected,
+        disconnectedAt: s.disconnectedAt,
       })),
     };
   }

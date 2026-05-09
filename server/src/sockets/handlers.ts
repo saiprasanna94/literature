@@ -10,7 +10,7 @@ import { Server, Socket } from 'socket.io';
 import { applyAsk } from '../engine/ask.js';
 import { applyClaim } from '../engine/claim.js';
 import { applyTakeTurn } from '../engine/turn.js';
-import { Room, RoomManager } from '../rooms/manager.js';
+import { RECLAIM_GRACE_MS, Room, RoomManager } from '../rooms/manager.js';
 
 type IO = Server<ClientToServer, ServerToClient>;
 type ClientSocket = Socket<ClientToServer, ServerToClient>;
@@ -48,6 +48,8 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
   const playerSockets = new Map<string, Set<string>>();
   /** socketId -> { playerId, roomId } so we can clean up on disconnect */
   const socketIndex = new Map<string, { playerId: string; roomId: string }>();
+  /** playerId -> timer that fires once the grace window expires */
+  const graceTimers = new Map<string, NodeJS.Timeout>();
 
   function attachPlayerSocket(socket: ClientSocket, playerId: string, roomId: string): void {
     let set = playerSockets.get(playerId);
@@ -58,6 +60,38 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
     set.add(socket.id);
     socketIndex.set(socket.id, { playerId, roomId });
     socket.join(`room:${roomId}`);
+
+    // Cancel any pending grace timer; mark seat connected and broadcast.
+    const t = graceTimers.get(playerId);
+    if (t) {
+      clearTimeout(t);
+      graceTimers.delete(playerId);
+    }
+    const room = rooms.markConnected(playerId);
+    if (room) broadcastRoom(room);
+  }
+
+  function detachPlayerSocket(socketId: string): void {
+    const idx = socketIndex.get(socketId);
+    if (!idx) return;
+    socketIndex.delete(socketId);
+
+    const set = playerSockets.get(idx.playerId);
+    if (set) {
+      set.delete(socketId);
+      if (set.size === 0) {
+        playerSockets.delete(idx.playerId);
+        // No more sockets for this player — start the disconnect grace timer.
+        const room = rooms.markDisconnected(idx.playerId);
+        if (room) broadcastRoom(room);
+        const timer = setTimeout(() => {
+          graceTimers.delete(idx.playerId);
+          const r = rooms.getRoom(idx.roomId);
+          if (r) broadcastRoom(r); // re-broadcast so clients see "reclaimable"
+        }, RECLAIM_GRACE_MS + 100);
+        graceTimers.set(idx.playerId, timer);
+      }
+    }
   }
 
   io.on('connection', (socket: ClientSocket) => {
@@ -68,8 +102,6 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
         const { roomId, playerId } = rooms.createRoom(name, size);
         attachPlayerSocket(socket, playerId, roomId);
         cb({ ok: true, roomId, playerId });
-        const room = rooms.getRoom(roomId)!;
-        broadcastRoom(room);
       } catch (e: any) {
         cb({ ok: false, error: e?.message ?? 'CREATE_FAILED' });
       }
@@ -82,8 +114,6 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
         const { playerId } = rooms.joinRoom(roomId, name);
         attachPlayerSocket(socket, playerId, roomId);
         cb({ ok: true, playerId });
-        const room = rooms.getRoom(roomId)!;
-        broadcastRoom(room);
       } catch (e: any) {
         cb({ ok: false, error: e?.message ?? 'JOIN_FAILED' });
       }
@@ -102,6 +132,22 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
         }
       } catch (e: any) {
         cb({ ok: false, error: e?.message ?? 'REJOIN_FAILED' });
+      }
+    });
+
+    socket.on('room:reclaim', (args, cb) => {
+      try {
+        const name = sanitizeName(args?.name);
+        const roomId = String(args?.roomId ?? '').toUpperCase();
+        const { room, playerId } = rooms.reclaimSeat(roomId, name);
+        attachPlayerSocket(socket, playerId, roomId);
+        cb({ ok: true, playerId });
+        socket.emit('room:update', rooms.toSummary(room));
+        if (room.game) {
+          socket.emit('game:update', toPublicState(room.game, playerId));
+        }
+      } catch (e: any) {
+        cb({ ok: false, error: e?.message ?? 'RECLAIM_FAILED' });
       }
     });
 
@@ -179,15 +225,7 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
     });
 
     socket.on('disconnect', () => {
-      const idx = socketIndex.get(socket.id);
-      if (!idx) return;
-      const set = playerSockets.get(idx.playerId);
-      if (set) {
-        set.delete(socket.id);
-        if (set.size === 0) playerSockets.delete(idx.playerId);
-      }
-      socketIndex.delete(socket.id);
-      // Don't auto-leave on disconnect — let the player reconnect via rejoin.
+      detachPlayerSocket(socket.id);
     });
   });
 

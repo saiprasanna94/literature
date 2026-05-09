@@ -1,3 +1,6 @@
+import { SeatSummary } from '@literature/shared';
+import { ConnectionBadge } from '../components/ConnectionBadge.js';
+import { seatConnectionState } from '../lib/connection.js';
 import { useGameStore } from '../store.js';
 
 export function LobbyPage() {
@@ -38,8 +41,22 @@ export function LobbyPage() {
         </header>
 
         <div className="grid grid-cols-2 gap-4">
-          <TeamColumn label="Team A" team="A" seats={teamA} myId={session.playerId} hostId={room.hostPlayerId} />
-          <TeamColumn label="Team B" team="B" seats={teamB} myId={session.playerId} hostId={room.hostPlayerId} />
+          <TeamColumn
+            label="Team A"
+            team="A"
+            seats={teamA}
+            myId={session.playerId}
+            hostId={room.hostPlayerId}
+            graceMs={room.reclaimGraceMs}
+          />
+          <TeamColumn
+            label="Team B"
+            team="B"
+            seats={teamB}
+            myId={session.playerId}
+            hostId={room.hostPlayerId}
+            graceMs={room.reclaimGraceMs}
+          />
         </div>
 
         <div className="rounded-xl bg-black/30 backdrop-blur-sm border border-white/10 px-5 py-4 flex items-center justify-between">
@@ -82,12 +99,14 @@ function TeamColumn({
   seats,
   myId,
   hostId,
+  graceMs,
 }: {
   label: string;
   team: 'A' | 'B';
-  seats: { seat: number; team: 'A' | 'B'; playerId: string | null; name: string | null }[];
+  seats: SeatSummary[];
   myId: string;
   hostId: string;
+  graceMs: number;
 }) {
   const accent =
     team === 'A'
@@ -120,6 +139,7 @@ function TeamColumn({
                 </span>
               </div>
               <div className="flex items-center gap-1">
+                {filled && <ConnectionBadge state={seatConnectionState(s, graceMs)} />}
                 {isHost && (
                   <span className="rounded-full bg-gold px-2 py-0.5 text-[9px] font-bold uppercase text-slate-900">
                     Host

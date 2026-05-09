@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { DisconnectOverlay } from './components/DisconnectOverlay.js';
 import { useGameStore } from './store.js';
 
 export function App() {
@@ -28,6 +29,7 @@ export function App() {
   return (
     <div className="min-h-full">
       <Outlet />
+      <DisconnectOverlay />
     </div>
   );
 }

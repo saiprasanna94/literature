@@ -35,6 +35,8 @@ function clearSession() {
 type Store = {
   socket: Socket<ServerToClient, ClientToServer> | null;
   connected: boolean;
+  /** True iff our own socket is currently disconnected and we have a session to recover. */
+  reconnecting: boolean;
   session: Session | null;
   room: RoomSummary | null;
   game: PublicGameState | null;
@@ -45,6 +47,7 @@ type Store = {
 
   createRoom: (name: string, size: 6 | 8) => Promise<{ ok: true } | { ok: false; error: string }>;
   joinRoom: (roomId: string, name: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  reclaimSeat: (roomId: string, name: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   leaveRoom: () => Promise<void>;
   startGame: () => Promise<{ ok: true } | { ok: false; error: string }>;
   ask: (payload: AskPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -56,6 +59,7 @@ type Store = {
 export const useGameStore = create<Store>((set, get) => ({
   socket: null,
   connected: false,
+  reconnecting: false,
   session: loadSession(),
   room: null,
   game: null,
@@ -66,9 +70,29 @@ export const useGameStore = create<Store>((set, get) => ({
     const socket: Socket<ServerToClient, ClientToServer> = io(SERVER_URL, {
       transports: ['websocket'],
       autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 4000,
     });
-    socket.on('connect', () => set({ connected: true }));
-    socket.on('disconnect', () => set({ connected: false }));
+    socket.on('connect', () => {
+      set({ connected: true });
+      // If we lost connection mid-session, transparently rejoin.
+      const s = get().session;
+      if (s && get().reconnecting) {
+        socket.emit('room:rejoin', s, (res) => {
+          if (res.ok) set({ reconnecting: false });
+          else {
+            // Original session no longer valid (e.g. server restart) — bail.
+            clearSession();
+            set({ reconnecting: false, session: null, room: null, game: null });
+          }
+        });
+      }
+    });
+    socket.on('disconnect', () => {
+      const haveSession = !!get().session;
+      set({ connected: false, reconnecting: haveSession });
+    });
     socket.on('room:update', (room) => set({ room }));
     socket.on('game:update', (game) => set({ game }));
     socket.on('room:closed', () => {
@@ -127,6 +151,23 @@ export const useGameStore = create<Store>((set, get) => ({
       });
     }),
 
+  reclaimSeat: (roomId, name) =>
+    new Promise((resolve) => {
+      const sock = get().socket;
+      if (!sock) return resolve({ ok: false, error: 'NO_SOCKET' });
+      sock.emit('room:reclaim', { roomId, name }, (res) => {
+        if (res.ok) {
+          const session = { roomId: roomId.toUpperCase(), playerId: res.playerId };
+          saveSession(session);
+          set({ session });
+          resolve({ ok: true });
+        } else {
+          set({ lastError: res.error });
+          resolve(res);
+        }
+      });
+    }),
+
   leaveRoom: () =>
     new Promise<void>((resolve) => {
       const sock = get().socket;
@@ -137,7 +178,7 @@ export const useGameStore = create<Store>((set, get) => ({
       }
       sock.emit('room:leave', () => {
         clearSession();
-        set({ session: null, room: null, game: null });
+        set({ session: null, room: null, game: null, reconnecting: false });
         resolve();
       });
     }),

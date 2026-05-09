@@ -1,16 +1,19 @@
-import { cardId, PublicGameState, PublicPlayer, TeamId } from '@literature/shared';
+import { cardId, PublicGameState, PublicPlayer, RoomSummary, TeamId } from '@literature/shared';
 import { useState } from 'react';
 import { AskDialog } from '../components/AskDialog.js';
 import { CardView } from '../components/Card.js';
 import { ClaimDialog } from '../components/ClaimDialog.js';
+import { ConnectionBadge } from '../components/ConnectionBadge.js';
 import { DeductionPanel } from '../components/DeductionPanel.js';
 import { EventLog } from '../components/EventLog.js';
 import { VictoryOverlay } from '../components/VictoryOverlay.js';
+import { findSeat, seatConnectionState } from '../lib/connection.js';
 import { friendlyError } from '../lib/errors.js';
 import { useGameStore } from '../store.js';
 
 export function GamePage() {
   const game = useGameStore((s) => s.game);
+  const room = useGameStore((s) => s.room);
   const session = useGameStore((s) => s.session);
   const ask = useGameStore((s) => s.ask);
   const claim = useGameStore((s) => s.claim);
@@ -21,7 +24,7 @@ export function GamePage() {
   const [showAsk, setShowAsk] = useState(false);
   const [showClaim, setShowClaim] = useState(false);
 
-  if (!game || !session) {
+  if (!game || !session || !room) {
     return (
       <div className="felt-bg flex min-h-screen items-center justify-center text-white">
         Loading game…
@@ -86,6 +89,7 @@ export function GamePage() {
               team={opposingTeam[0]?.team ?? 'B'}
               players={opposingTeam}
               game={game}
+              room={room}
               myId={me.id}
             />
 
@@ -94,6 +98,7 @@ export function GamePage() {
               team={myTeam}
               players={friendlyTeam}
               game={game}
+              room={room}
               myId={me.id}
             />
 
@@ -199,12 +204,14 @@ function TeamPanel({
   team,
   players,
   game,
+  room,
   myId,
 }: {
   label: string;
   team: TeamId;
   players: PublicPlayer[];
   game: PublicGameState;
+  room: RoomSummary;
   myId: string;
 }) {
   const accent =
@@ -221,7 +228,7 @@ function TeamPanel({
       </h2>
       <div className="flex flex-wrap gap-3">
         {players.map((p) => (
-          <PlayerCard key={p.id} player={p} game={game} myId={myId} />
+          <PlayerCard key={p.id} player={p} game={game} room={room} myId={myId} />
         ))}
       </div>
     </div>
@@ -231,10 +238,12 @@ function TeamPanel({
 function PlayerCard({
   player,
   game,
+  room,
   myId,
 }: {
   player: PublicPlayer;
   game: PublicGameState;
+  room: RoomSummary;
   myId: string;
 }) {
   const isTurn = game.currentTurnPlayerId === player.id;
@@ -245,21 +254,26 @@ function PlayerCard({
     game.pendingTurnSelection.eligibleTeam === player.team &&
     player.handCount > 0;
 
+  const seat = findSeat(room, player.id);
+  const connState = seat ? seatConnectionState(seat, room.reclaimGraceMs) : 'connected';
+  const disconnectedCls = connState !== 'connected' ? 'opacity-70' : '';
+
   const baseCls = `relative min-w-[140px] rounded-lg border bg-white/95 px-3 py-2 text-slate-900 transition-all`;
   const turnCls = isTurn ? 'ring-2 ring-gold animate-pulse-ring' : '';
   const meCls = isMe ? 'border-2 border-amber-500' : 'border-slate-200';
   const emptyCls = empty ? 'opacity-60' : '';
 
   return (
-    <div className={`${baseCls} ${turnCls} ${meCls} ${emptyCls}`}>
-      <div className="flex items-baseline justify-between">
+    <div className={`${baseCls} ${turnCls} ${meCls} ${emptyCls} ${disconnectedCls}`}>
+      <div className="flex items-baseline justify-between gap-1">
         <div className="font-semibold text-sm truncate">{player.name}</div>
         {isMe && <span className="ml-2 text-[10px] uppercase text-amber-600">you</span>}
       </div>
-      <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+      <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-500">
         <span aria-hidden>🂠</span>
         <span>{player.handCount}</span>
-        {empty && <span className="ml-1 text-slate-400">— empty</span>}
+        {empty && <span className="text-slate-400">— empty</span>}
+        {connState !== 'connected' && <ConnectionBadge state={connState} />}
       </div>
       {canTakeTurnNow && (
         <span className="absolute -top-2 right-2 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
