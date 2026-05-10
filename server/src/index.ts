@@ -8,7 +8,9 @@ import { RoomManager } from './rooms/manager.js';
 import { registerHandlers } from './sockets/handlers.js';
 
 const PORT = Number(process.env.PORT ?? 4000);
-const ORIGIN = process.env.CLIENT_ORIGIN ?? 'http://localhost:5173';
+const ORIGIN = (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
+  .split(',')
+  .map((s) => s.trim());
 
 const app = express();
 app.use(cors({ origin: ORIGIN }));
