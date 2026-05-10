@@ -8,6 +8,7 @@ import {
 } from '@literature/shared';
 import { io, Socket } from 'socket.io-client';
 import { create } from 'zustand';
+import { isMuted, setMuted } from './lib/sounds.js';
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ?? `http://${window.location.hostname}:4000`;
@@ -41,6 +42,8 @@ type Store = {
   room: RoomSummary | null;
   game: PublicGameState | null;
   lastError: string | null;
+  muted: boolean;
+  toggleMute: () => void;
 
   connect: () => void;
   tryRejoin: () => Promise<void>;
@@ -50,6 +53,7 @@ type Store = {
   reclaimSeat: (roomId: string, name: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   leaveRoom: () => Promise<void>;
   startGame: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  rematch: () => Promise<{ ok: true } | { ok: false; error: string }>;
   ask: (payload: AskPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
   claim: (payload: ClaimPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
   takeTurn: () => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -64,6 +68,12 @@ export const useGameStore = create<Store>((set, get) => ({
   room: null,
   game: null,
   lastError: null,
+  muted: isMuted(),
+  toggleMute: () => {
+    const next = !get().muted;
+    setMuted(next);
+    set({ muted: next });
+  },
 
   connect: () => {
     if (get().socket) return;
@@ -188,6 +198,16 @@ export const useGameStore = create<Store>((set, get) => ({
       const sock = get().socket;
       if (!sock) return resolve({ ok: false, error: 'NO_SOCKET' });
       sock.emit('game:start', (res) => {
+        if (!res.ok) set({ lastError: res.error });
+        resolve(res);
+      });
+    }),
+
+  rematch: () =>
+    new Promise((resolve) => {
+      const sock = get().socket;
+      if (!sock) return resolve({ ok: false, error: 'NO_SOCKET' });
+      sock.emit('room:rematch', (res) => {
         if (!res.ok) set({ lastError: res.error });
         resolve(res);
       });

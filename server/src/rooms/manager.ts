@@ -194,6 +194,23 @@ export class RoomManager {
     return room;
   }
 
+  /**
+   * Re-deal the same room. Same seats, same playerIds, fresh random hands.
+   * Only allowed once a game has finished, and only by the host.
+   */
+  rematchGame(roomId: string, hostId: string): Room {
+    const room = this.getRoom(roomId);
+    if (!room) throw new Error('ROOM_NOT_FOUND');
+    if (room.hostPlayerId !== hostId) throw new Error('NOT_HOST');
+    if (room.status !== 'finished') throw new Error('GAME_NOT_FINISHED');
+    if (room.seats.some((s) => s.playerId === null)) throw new Error('ROOM_NOT_FULL');
+
+    const playerInits = room.seats.map((s) => ({ id: s.playerId!, name: s.name! }));
+    room.game = createGame(room.roomId, room.size, playerInits);
+    room.status = 'in_progress';
+    return room;
+  }
+
   setGame(roomId: string, game: GameState): void {
     const room = this.getRoom(roomId);
     if (!room) throw new Error('ROOM_NOT_FOUND');

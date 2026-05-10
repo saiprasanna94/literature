@@ -187,6 +187,19 @@ export function registerHandlers(io: IO, rooms: RoomManager) {
       }
     });
 
+    socket.on('room:rematch', (cb) => {
+      try {
+        const idx = socketIndex.get(socket.id);
+        if (!idx) throw new Error('NOT_IN_ROOM');
+        const room = rooms.rematchGame(idx.roomId, idx.playerId);
+        cb({ ok: true });
+        broadcastRoom(room);
+        broadcastGame(room);
+      } catch (e: any) {
+        cb({ ok: false, error: e?.message ?? 'REMATCH_FAILED' });
+      }
+    });
+
     socket.on('turn:ask', (args, cb) => {
       const result = withGame(socket, (room, game, playerId) => {
         const next = applyAsk(game, {

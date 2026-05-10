@@ -1,7 +1,8 @@
 import { cardId, PublicGameState, PublicPlayer, RoomSummary, TeamId } from '@literature/shared';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AskDialog } from '../components/AskDialog.js';
 import { CardView } from '../components/Card.js';
+import { CardTransferLayer } from '../components/CardTransferLayer.js';
 import { ClaimDialog } from '../components/ClaimDialog.js';
 import { ConnectionBadge } from '../components/ConnectionBadge.js';
 import { DeductionPanel } from '../components/DeductionPanel.js';
@@ -9,6 +10,7 @@ import { EventLog } from '../components/EventLog.js';
 import { VictoryOverlay } from '../components/VictoryOverlay.js';
 import { findSeat, seatConnectionState } from '../lib/connection.js';
 import { friendlyError } from '../lib/errors.js';
+import { sounds } from '../lib/sounds.js';
 import { useGameStore } from '../store.js';
 
 export function GamePage() {
@@ -23,6 +25,57 @@ export function GamePage() {
 
   const [showAsk, setShowAsk] = useState(false);
   const [showClaim, setShowClaim] = useState(false);
+
+  // Sound-effects bookkeeping. Track the highest seen seq for asks, claims,
+  // turn pointer, and game status so we only play on transitions.
+  const lastAskSeq = useRef(-1);
+  const lastClaimSeq = useRef(-1);
+  const lastTurnPlayerId = useRef<string | null | undefined>(undefined);
+  const lastStatus = useRef<'in_progress' | 'finished' | 'lobby' | undefined>(undefined);
+
+  useEffect(() => {
+    if (!game || !session) return;
+
+    // First effect run: snap refs without emitting sounds for historical events.
+    if (lastAskSeq.current === -1) {
+      lastAskSeq.current =
+        game.asks.length > 0 ? game.asks[game.asks.length - 1]!.seq : 0;
+      lastClaimSeq.current =
+        game.claims.length > 0 ? game.claims[game.claims.length - 1]!.seq : 0;
+      lastTurnPlayerId.current = game.currentTurnPlayerId;
+      lastStatus.current = game.status;
+      return;
+    }
+
+    for (const a of game.asks) {
+      if (a.seq <= lastAskSeq.current) continue;
+      lastAskSeq.current = a.seq;
+      if (a.success) sounds.askSuccess();
+      else sounds.askFail();
+    }
+    for (const c of game.claims) {
+      if (c.seq <= lastClaimSeq.current) continue;
+      lastClaimSeq.current = c.seq;
+      if (c.success) sounds.claimSuccess();
+      else sounds.claimFail();
+    }
+
+    if (
+      lastTurnPlayerId.current !== game.currentTurnPlayerId &&
+      game.currentTurnPlayerId === session.playerId &&
+      game.status === 'in_progress'
+    ) {
+      sounds.yourTurn();
+    }
+    lastTurnPlayerId.current = game.currentTurnPlayerId;
+
+    if (lastStatus.current !== 'finished' && game.status === 'finished') {
+      const me = game.players.find((p) => p.id === session.playerId);
+      if (me && game.winner === me.team) sounds.victory();
+      else sounds.defeat();
+    }
+    lastStatus.current = game.status;
+  }, [game, session]);
 
   if (!game || !session || !room) {
     return (
@@ -72,12 +125,15 @@ export function GamePage() {
             <span className="text-sm text-white/40">vs</span>
             <ScoreBadge team="B" score={setsB} active={myTeam === 'B'} />
           </div>
-          <button
-            className="rounded-lg border border-white/20 px-3 py-1 text-xs hover:bg-white/10 transition-colors"
-            onClick={() => leaveRoom()}
-          >
-            Leave
-          </button>
+          <div className="flex items-center gap-2">
+            <MuteToggle />
+            <button
+              className="rounded-lg border border-white/20 px-3 py-1 text-xs hover:bg-white/10 transition-colors"
+              onClick={() => leaveRoom()}
+            >
+              Leave
+            </button>
+          </div>
         </header>
 
         <TurnBanner game={game} myTurn={myTurn} pendingForMe={pendingForMe} />
@@ -139,8 +195,23 @@ export function GamePage() {
         )}
 
         <VictoryOverlay game={game} onLeave={() => leaveRoom()} />
+        <CardTransferLayer />
       </div>
     </div>
+  );
+}
+
+function MuteToggle() {
+  const muted = useGameStore((s) => s.muted);
+  const toggleMute = useGameStore((s) => s.toggleMute);
+  return (
+    <button
+      onClick={toggleMute}
+      title={muted ? 'Unmute sounds' : 'Mute sounds'}
+      className="rounded-lg border border-white/20 px-2 py-1 text-xs hover:bg-white/10 transition-colors"
+    >
+      {muted ? '🔇' : '🔊'}
+    </button>
   );
 }
 
@@ -264,7 +335,10 @@ function PlayerCard({
   const emptyCls = empty ? 'opacity-60' : '';
 
   return (
-    <div className={`${baseCls} ${turnCls} ${meCls} ${emptyCls} ${disconnectedCls}`}>
+    <div
+      data-player-id={player.id}
+      className={`${baseCls} ${turnCls} ${meCls} ${emptyCls} ${disconnectedCls}`}
+    >
       <div className="flex items-baseline justify-between gap-1">
         <div className="font-semibold text-sm truncate">{player.name}</div>
         {isMe && <span className="ml-2 text-[10px] uppercase text-amber-600">you</span>}

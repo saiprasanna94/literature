@@ -1,6 +1,8 @@
 import { ALL_SETS, PublicGameState, SET_LABELS, TeamId } from '@literature/shared';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { friendlyError } from '../lib/errors.js';
+import { useGameStore } from '../store.js';
 
 const CONFETTI_COLORS = ['#d4af37', '#f1d77a', '#2563eb', '#dc2626', '#ffffff', '#10b981'];
 const CONFETTI_COUNT = 60;
@@ -12,7 +14,22 @@ export function VictoryOverlay({
   game: PublicGameState;
   onLeave: () => void;
 }) {
+  const room = useGameStore((s) => s.room);
+  const session = useGameStore((s) => s.session);
+  const rematch = useGameStore((s) => s.rematch);
+  const [rematchBusy, setRematchBusy] = useState(false);
+  const [rematchError, setRematchError] = useState<string | null>(null);
+
   if (game.status !== 'finished' || !game.winner) return null;
+
+  const isHost = !!room && !!session && room.hostPlayerId === session.playerId;
+  const onRematch = async () => {
+    setRematchError(null);
+    setRematchBusy(true);
+    const res = await rematch();
+    setRematchBusy(false);
+    if (!res.ok) setRematchError(friendlyError(res.error));
+  };
 
   const winner: TeamId = game.winner;
   const setsA = game.claimedSets.filter((cs) => cs.team === 'A').length;
@@ -119,19 +136,37 @@ export function VictoryOverlay({
           )}
         </div>
 
-        <div className="flex justify-center gap-3">
-          <button
-            onClick={onLeave}
-            className="rounded-lg bg-gold px-6 py-3 font-semibold text-slate-900 shadow-lg hover:bg-gold-light transition-colors"
-          >
-            Back to home
-          </button>
-          <Link
-            to="/history"
-            className="rounded-lg border border-white/30 px-6 py-3 font-semibold text-white hover:bg-white/10 transition-colors"
-          >
-            Review this game
-          </Link>
+        <div className="space-y-3">
+          <div className="flex flex-wrap justify-center gap-3">
+            {isHost ? (
+              <button
+                onClick={onRematch}
+                disabled={rematchBusy}
+                className="rounded-lg bg-emerald-500 px-6 py-3 font-semibold text-white shadow-lg hover:bg-emerald-600 disabled:opacity-60 transition-colors"
+              >
+                {rematchBusy ? 'Restarting…' : '↻ Play again'}
+              </button>
+            ) : (
+              <span className="self-center rounded-lg border border-white/20 px-4 py-2 text-sm italic text-white/70">
+                Waiting for the host to rematch or leave…
+              </span>
+            )}
+            <Link
+              to="/history"
+              className="rounded-lg border border-white/30 px-6 py-3 font-semibold text-white hover:bg-white/10 transition-colors"
+            >
+              Review this game
+            </Link>
+            <button
+              onClick={onLeave}
+              className="rounded-lg bg-gold px-6 py-3 font-semibold text-slate-900 shadow-lg hover:bg-gold-light transition-colors"
+            >
+              Back to home
+            </button>
+          </div>
+          {rematchError && (
+            <p className="text-sm text-red-300">Rematch failed: {rematchError}</p>
+          )}
         </div>
       </div>
     </div>

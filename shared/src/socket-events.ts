@@ -50,6 +50,8 @@ export type ClientToServer = {
 
   'game:start': (cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
 
+  'room:rematch': (cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
+
   'turn:ask': (args: AskPayload, cb: (res: { ok: true } | { ok: false; error: string }) => void) => void;
 
   'turn:claim': (
